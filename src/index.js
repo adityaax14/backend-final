@@ -1,7 +1,9 @@
+import dotenv from "dotenv";
+dotenv.config(); // MUST be first
 import mongoose from "mongoose";
-import {DB_NAME} from "./constants";
-import express from "express"
-const app=express()
+import {DB_NAME} from "./constants.js";
+import { app } from "./app.js";
+
 
 
 ;(async ()=>{
@@ -12,7 +14,7 @@ const app=express()
       throw error
     })
     app.listen(process.env.PORT,()=>{
-      console.log('App is listening on port');
+      console.log('App is listening on port', process.env.PORT);
     })
   }
   catch (error){
