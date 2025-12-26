@@ -162,13 +162,13 @@ const logoutUser= asyncHandler(async (req,res)=>{
 
 const refereshAccessToken=asyncHandler(async(req,res)=>{
    const incomingRefereshToken=req.cookies.refereshToken || req.body.refereshToken
-   if(incomingRefereshToken){
+   if(!incomingRefereshToken){
     throw new ApiError(401,"unautorized request");
    }
   const decodedToken=jwt.verify(incomingRefereshToken,process.env.REFERESH_TOKEN_SECRET)
   const user=await User.findById(decodedToken?._id)
   if(!user){
-    throw new Api
+     throw new ApiError(401, "Invalid refresh token");
   }
   if(incomingRefereshToken!==user?.refereshToken){
     throw new ApiError(401,"Referesh token i expired or used")
