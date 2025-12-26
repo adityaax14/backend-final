@@ -3,6 +3,22 @@ import {ApiError} from "../utils/ApiError.js"
 import {User} from "../models/user.model.js"
 import {uploadOnCloudinary} from "../utils/cloudnary.js"
 import { ApiResponse } from "../utils/ApiResponse.js"
+import jwt from "jsonwebtoken"
+
+const generateAccessAndRefereshTokens= async(userId)=>{
+    try{
+      const user= await User.findById(userId)
+      const accessToken=user.generateAccessToken()
+      const refereshToken=user.generateRefereshToken()
+      user.refereshToken=refereshToken
+      await user.save({validateBeforeSave:false})
+
+      return {accessToken,refereshToken}
+    }
+    catch(error){
+      throw new ApiError(500,"something went wrong while gernerting referesh and acess token")
+    }
+}
 
 
 const registerUser= asyncHandler( async (req,res)=>{
@@ -30,7 +46,7 @@ const registerUser= asyncHandler( async (req,res)=>{
       throw new ApiError(400,"FULL name is required")
     }
 
-   const existedUser= User.findOne({
+   const existedUser= await User.findOne({
        $or:[{username},{email}]
     })
     if(existedUser){
@@ -41,12 +57,19 @@ const registerUser= asyncHandler( async (req,res)=>{
     if(!avatarLocalPath){
       throw new ApiError(400,"Avatar file is required")
     }
-    const avatar=await uploadOnCloudinary(avatarLocalPath)
-    const coverImage=await uploadOnCloudinary(coverImageLocalPath)
+    const avatar = await uploadOnCloudinary(avatarLocalPath);
 
+if (!avatar) {
+  throw new ApiError(500, "Avatar upload failed");
+}
+
+let coverImage;
+if (coverImageLocalPath) {
+  coverImage = await uploadOnCloudinary(coverImageLocalPath);
+}
     const user = await User.create({
       fullname,
-      avatar:avatar.url,
+      avatar: avatar.secure_url,
       coverImage: coverImage?.url || "",
       email,
       password,
@@ -62,8 +85,109 @@ const registerUser= asyncHandler( async (req,res)=>{
       throw new ApiError(500,"Something went wrong while registering the user")
     }
       return res.status(201).json(
-        new ApiResponse(200,createdUser,"User registered Succesfully")
+        new ApiResponse(201,createdUser,"User registered Succesfully")
       )
 })
 
-export {registerUser}
+const loginUser= asyncHandler(async (req,res)=>{
+     // req body-> data
+     // username or email
+     //find the user
+     //password check
+     //acess and refersh token
+     //send cookie
+
+     const {email,username,password}=req.body
+     if(!(username || email)){
+       throw new ApiError(400,"Username or email is required")
+     }
+     const user=await User.findOne({
+      $or:[{username},{email}]
+     })
+
+     if(!user){
+      throw new ApiError(404,"User does not exist")
+
+     }
+
+    const isPasswordValid= await user.isPasswordCorrect(password)
+    if(!isPasswordValid){
+      throw new ApiError(401,"Invalid User credentials")
+    }
+  const {accessToken,refereshToken}= await generateAccessAndRefereshTokens(user._id)
+  
+  const loggedInUser= await User.findById(user._id).select("-password -refereshToken")
+
+      const options={
+        httpOnly:true,
+        secure:true
+
+      }
+
+      return res.status(200).cookie("accessToken",accessToken,options)
+      .cookie("refereshToken",refereshToken,options)
+      .json(
+        new ApiResponse(
+          200,
+          {
+            user:loggedInUser,accessToken,refereshToken
+          },
+          "User logged in successfully"
+        )
+      )
+
+      
+
+
+})
+const logoutUser= asyncHandler(async (req,res)=>{
+     await User.findByIdAndUpdate(
+        req.user._id,
+        {
+          $set:{
+            refereshToken:undefined
+          }
+        }
+      )
+      const options={
+        httpOnly:true,
+        secure:true
+
+      }
+
+      return res.status(200).clearCookie("accessToken",options).clearCookie("refereshToken",options)
+      .json(new ApiResponse(200,{},"User logged out"))
+
+})
+
+const refereshAccessToken=asyncHandler(async(req,res)=>{
+   const incomingRefereshToken=req.cookies.refereshToken || req.body.refereshToken
+   if(incomingRefereshToken){
+    throw new ApiError(401,"unautorized request");
+   }
+  const decodedToken=jwt.verify(incomingRefereshToken,process.env.REFERESH_TOKEN_SECRET)
+  const user=await User.findById(decodedToken?._id)
+  if(!user){
+    throw new Api
+  }
+  if(incomingRefereshToken!==user?.refereshToken){
+    throw new ApiError(401,"Referesh token i expired or used")
+  }
+
+   const options={
+        httpOnly:true,
+        secure:true
+
+      }
+
+      const{accessToken,refereshToken}=await generateAccessAndRefereshTokens(user._id)
+      return res.status(200).cookie("accessToken",accessToken,options).cookie("refereshToken",refereshToken,options)
+      .json( new ApiResponse(
+        200,
+        {accessToken,refereshToken}
+      )
+
+      )
+ 
+})
+export {registerUser,loginUser,logoutUser,refereshAccessToken}

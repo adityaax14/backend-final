@@ -8,7 +8,7 @@ import { app } from "./app.js";
 
 ;(async ()=>{
   try{
-   await mongoose.connect(`${process.env.MONGODB_URI}/${DB_NAME}`)
+   await mongoose.connect(`${process.env.MONGODB_URI}`)
     app.on("errror",(error)=>{
       console.log("ERRR",error);
       throw error
